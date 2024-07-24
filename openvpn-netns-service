@@ -1,0 +1,89 @@
+#!/bin/bash
+
+if [ "$EUID" -ne 0 ]
+  then echo "Please run as root"
+  exit
+fi
+
+NETNS=$1
+
+if [ -z "$NETNS" ]; then
+    echo "$0 should be run with a netns parameter."
+    exit -1
+fi
+# Variables
+NETNS_FOLDER=/etc/openvpn-netns/$NETNS
+RUN_FOLDER=/var/run/openvpn-netns/$NETNS
+INDEX_FILE=$RUN_FOLDER/index
+
+# Function to run openvpn-netns
+openvpn_netns_run() {
+    local folder=$1
+    echo "Using folder $folder"
+
+    local params_file=${folder}params
+    local conf_file=${folder}config.ovpn
+
+    # Check if params file exists
+    if [ ! -e "$params_file" ]; then
+        echo "File '$params_file' is not found"
+        exit -1
+    fi
+
+    # Check if config.ovpn file exists
+    if [ ! -e "$conf_file" ]; then
+        echo "File '$conf_file' is not found"
+        exit -1
+    fi
+
+    # Read params
+    read params < "$params_file"
+
+    # Run the command with the selected folder as the working directory
+    echo "Running openvpn-netns on netns $NETNS with params: $params in folder $folder"
+    (cd "$folder" && NETNS=$NETNS /usr/local/bin/openvpn-netns --config "$conf_file" $params)
+
+}
+
+# Check for a single config.ovpn file in the netns folder
+if [ -e "$NETNS_FOLDER/config.ovpn" ]; then
+    openvpn_netns_run "$NETNS_FOLDER/"
+    exit 0
+fi
+
+# Ensure the run folder exists
+if [ ! -d "$RUN_FOLDER" ]; then
+    mkdir -p "$RUN_FOLDER"
+fi
+
+# Ensure the index file exists
+if [ ! -e "$INDEX_FILE" ]; then
+    echo "0" > "$INDEX_FILE"
+fi
+
+# Read the current index
+current_index=$(cat "$INDEX_FILE")
+
+# List all directories in the NETNS_FOLDER and sort them alphabetically
+folders=($(ls -d $NETNS_FOLDER/*/ | sort))
+
+# Check if there are any folders
+if [ ${#folders[@]} -eq 0 ]; then
+    echo "No folders found in $NETNS_FOLDER"
+    exit -1
+fi
+
+# Get the folder to use
+selected_folder=${folders[$current_index]}
+
+# Calculate the next index
+next_index=$((current_index + 1))
+if [ $next_index -ge ${#folders[@]} ]; then
+    next_index=0
+fi
+
+# Update the index file
+echo "$next_index" > "$INDEX_FILE"
+
+# Run openvpn-netns with the selected folder
+openvpn_netns_run "$selected_folder"

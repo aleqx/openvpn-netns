@@ -8,9 +8,9 @@ case "$1" in
 esac
 
 exec sudo openvpn \
+    $config_arg "$@" \
     --ifconfig-noexec --route-noexec \
     --script-security 2 \
     --setenv NETNS "$NETNS" \
     --up "$SCRIPT_DIR"/netns \
-    --route-up "$SCRIPT_DIR"/netns \
-    $config_arg "$@"
+    --route-up "$SCRIPT_DIR"/netns
